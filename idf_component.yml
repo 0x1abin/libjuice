@@ -1,6 +1,7 @@
-version: "0.0.1"
-description: "JUICE is a UDP Interactive Connectivity Establishment library ported to ESP-IDF."
+version: "0.0.2"
+description: "JUICE is a UDP Interactive Connectivity Establishment library experimental ported to ESP-IDF."
 url: "https://github.com/0x1abin/libjuice"
+repository: "https://github.com/0x1abin/libjuice"
 license: "MPL-2.0"
 dependencies:
   idf:
