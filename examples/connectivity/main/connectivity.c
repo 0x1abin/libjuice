@@ -6,17 +6,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-#include "juice.h"
+#include "juice/juice.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
-#include "esp_log.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -25,16 +21,7 @@ static void sleep(unsigned int secs) { Sleep(secs * 1000); }
 #include <unistd.h> // for sleep
 #endif
 
-#define BUFFER_SIZE 128
-
-char sdp1[JUICE_MAX_SDP_STRING_LEN];
-char sdp2[JUICE_MAX_SDP_STRING_LEN];
-
-char local[JUICE_MAX_CANDIDATE_SDP_STRING_LEN];
-char remote[JUICE_MAX_CANDIDATE_SDP_STRING_LEN];
-
-char localAddr[JUICE_MAX_ADDRESS_STRING_LEN];
-char remoteAddr[JUICE_MAX_ADDRESS_STRING_LEN];
+#define BUFFER_SIZE 4096
 
 static juice_agent_t *agent1;
 static juice_agent_t *agent2;
@@ -52,66 +39,48 @@ static void on_recv1(juice_agent_t *agent, const char *data, size_t size, void *
 static void on_recv2(juice_agent_t *agent, const char *data, size_t size, void *user_ptr);
 
 int connectivity_example() {
-	printf("test_connectivity\n");
-	juice_set_log_level(JUICE_LOG_LEVEL_VERBOSE);
-
-    // juice_turn_server_t turn_servers = {
-    //     .host = "turn.cloudflare.com",
-    //     .port = 3478,
-    //     .username = "1721317636:twTgv7aY",
-    //     .password = "xxxxxxxxxxxx"
-    // };
+	juice_set_log_level(JUICE_LOG_LEVEL_DEBUG);
 
 	// Agent 1: Create agent
 	juice_config_t config1;
 	memset(&config1, 0, sizeof(config1));
 
 	// STUN server example
-	config1.stun_server_host = "stun.cloudfare.com";
-	config1.stun_server_port = 3478;
+	config1.stun_server_host = "stun.l.google.com";
+	config1.stun_server_port = 19302;
 
-	// TRUN server example
-	// config1.turn_servers = &turn_servers;
-	// config1.turn_servers_count = 1;
-
-	config1.bind_address = "::";
 	config1.cb_state_changed = on_state_changed1;
 	config1.cb_candidate = on_candidate1;
 	config1.cb_gathering_done = on_gathering_done1;
 	config1.cb_recv = on_recv1;
 	config1.user_ptr = NULL;
-	config1.concurrency_mode = JUICE_CONCURRENCY_MODE_POLL;
-	agent1 = juice_create(&config1);
 
+	agent1 = juice_create(&config1);
 
 	// Agent 2: Create agent
 	juice_config_t config2;
 	memset(&config2, 0, sizeof(config2));
 
 	// STUN server example
-	config2.stun_server_host = "stun.cloudfare.com";
-	config2.stun_server_port = 3478;
-
-	// TRUN server example
-	// config2.turn_servers = &turn_servers;
-	// config2.turn_servers_count = 1;
+	config2.stun_server_host = "stun.l.google.com";
+	config2.stun_server_port = 19302;
 
 	// Port range example
-	config2.bind_address = "::";
 	config2.local_port_range_begin = 60000;
 	config2.local_port_range_end = 61000;
+
 	config2.cb_state_changed = on_state_changed2;
 	config2.cb_candidate = on_candidate2;
 	config2.cb_gathering_done = on_gathering_done2;
 	config2.cb_recv = on_recv2;
 	config2.user_ptr = NULL;
-	config2.concurrency_mode = JUICE_CONCURRENCY_MODE_POLL;
+
 	agent2 = juice_create(&config2);
-	printf("Created agents.\n");
-	sleep(2);
 
 	// Agent 1: Generate local description
-	// char sdp1[JUICE_MAX_SDP_STRING_LEN];
+	char *sdp1 = malloc(JUICE_MAX_SDP_STRING_LEN);
+	char *sdp2 = malloc(JUICE_MAX_SDP_STRING_LEN);
+
 	juice_get_local_description(agent1, sdp1, JUICE_MAX_SDP_STRING_LEN);
 	printf("Local description 1:\n%s\n", sdp1);
 
@@ -119,12 +88,14 @@ int connectivity_example() {
 	juice_set_remote_description(agent2, sdp1);
 
 	// Agent 2: Generate local description
-	// char sdp2[JUICE_MAX_SDP_STRING_LEN];
 	juice_get_local_description(agent2, sdp2, JUICE_MAX_SDP_STRING_LEN);
 	printf("Local description 2:\n%s\n", sdp2);
 
 	// Agent 1: Receive description from agent 2
 	juice_set_remote_description(agent1, sdp2);
+
+	free(sdp1);
+	free(sdp2);
 
 	// Agent 1: Gather candidates (and send them to agent 2)
 	juice_gather_candidates(agent1);
@@ -142,8 +113,8 @@ int connectivity_example() {
 	bool success = (state1 == JUICE_STATE_COMPLETED && state2 == JUICE_STATE_COMPLETED);
 
 	// Retrieve candidates
-	// char local[JUICE_MAX_CANDIDATE_SDP_STRING_LEN];
-	// char remote[JUICE_MAX_CANDIDATE_SDP_STRING_LEN];
+	char local[JUICE_MAX_CANDIDATE_SDP_STRING_LEN];
+	char remote[JUICE_MAX_CANDIDATE_SDP_STRING_LEN];
 	if (success &=
 	    (juice_get_selected_candidates(agent1, local, JUICE_MAX_CANDIDATE_SDP_STRING_LEN, remote,
 	                                   JUICE_MAX_CANDIDATE_SDP_STRING_LEN) == 0)) {
@@ -164,8 +135,8 @@ int connectivity_example() {
 	}
 
 	// Retrieve addresses
-	// char localAddr[JUICE_MAX_ADDRESS_STRING_LEN];
-	// char remoteAddr[JUICE_MAX_ADDRESS_STRING_LEN];
+	char localAddr[JUICE_MAX_ADDRESS_STRING_LEN];
+	char remoteAddr[JUICE_MAX_ADDRESS_STRING_LEN];
 	if (success &= (juice_get_selected_addresses(agent1, localAddr, JUICE_MAX_ADDRESS_STRING_LEN,
 	                                             remoteAddr, JUICE_MAX_ADDRESS_STRING_LEN) == 0)) {
 		printf("Local address  1: %s\n", localAddr);
@@ -176,8 +147,6 @@ int connectivity_example() {
 		printf("Local address  2: %s\n", localAddr);
 		printf("Remote address 2: %s\n", remoteAddr);
 	}
-
-	sleep(600);
 
 	// Agent 1: destroy
 	juice_destroy(agent1);
@@ -192,8 +161,6 @@ int connectivity_example() {
 		printf("Failure\n");
 		return -1;
 	}
-	
-	return 0;
 }
 
 // Agent 1: on state changed

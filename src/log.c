@@ -18,44 +18,13 @@
 #include <unistd.h>
 #endif
 
-#ifdef ESP_PLATFORM__
-
-void juice_set_log_level(juice_log_level_t level)
-{
-    esp_log_level_t esp_level = ESP_LOG_NONE;
-    switch (level)
-    {
-    case JUICE_LOG_LEVEL_VERBOSE:
-        esp_level = ESP_LOG_VERBOSE;
-        break;
-    case JUICE_LOG_LEVEL_DEBUG:
-        esp_level = ESP_LOG_DEBUG;
-        break;
-    case JUICE_LOG_LEVEL_INFO:
-        esp_level = ESP_LOG_INFO;
-        break;
-    case JUICE_LOG_LEVEL_WARN:
-        esp_level = ESP_LOG_WARN;
-        break;
-    case JUICE_LOG_LEVEL_ERROR:
-    case JUICE_LOG_LEVEL_FATAL:
-        esp_level = ESP_LOG_ERROR;
-        break;
-    default:
-        break;
-    }
-
-    esp_log_level_set(JUICE_LOG_TAG, (esp_log_level_t)esp_level);
-}
-
-void juice_set_log_handler(juice_log_cb_t cb) {
-	// Not supported on ESP32
-	(void)cb;
-}
-
+#ifdef JUICE_LOG_BUFFER_SIZE
+#define BUFFER_SIZE JUICE_LOG_BUFFER_SIZE
+#elif defined(ESP_PLATFORM)
+#define BUFFER_SIZE 512
 #else
-
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 4096
+#endif
 
 static const char *log_level_names[] = {"VERBOSE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
 
@@ -168,5 +137,3 @@ __exit:
 #endif
 	mutex_unlock(&log_mutex);
 }
-
-#endif

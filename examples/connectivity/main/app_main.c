@@ -26,7 +26,7 @@ void connectivity_task(void *pvParameters)
 void connectivity_start(void)
 {
     ESP_LOGI(TAG, "connectivity_start");
-    xTaskCreate(connectivity_task, "connectivity_task", 4096, NULL, 5, NULL);
+    xTaskCreate(connectivity_task, "connectivity_task", 8192, NULL, 5, NULL);
 }
 
 void app_main(void)

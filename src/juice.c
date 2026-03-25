@@ -16,6 +16,7 @@
 #endif
 
 #include <stdio.h>
+#include <string.h>
 
 JUICE_EXPORT juice_agent_t *juice_create(const juice_config_t *config) {
 	if (!config)
@@ -53,20 +54,14 @@ JUICE_EXPORT int juice_set_remote_description(juice_agent_t *agent, const char *
 	if (!agent || !sdp)
 		return JUICE_ERR_INVALID;
 
-	if (agent_set_remote_description(agent, sdp) < 0)
-		return JUICE_ERR_FAILED;
-
-	return JUICE_ERR_SUCCESS;
+	return agent_set_remote_description(agent, sdp);
 }
 
 JUICE_EXPORT int juice_add_remote_candidate(juice_agent_t *agent, const char *sdp) {
 	if (!agent || !sdp)
 		return JUICE_ERR_INVALID;
 
-	if (agent_add_remote_candidate(agent, sdp) < 0)
-		return JUICE_ERR_FAILED;
-
-	return JUICE_ERR_SUCCESS;
+	return agent_add_remote_candidate(agent, sdp);
 }
 
 JUICE_EXPORT int juice_add_turn_server(juice_agent_t *agent, const juice_turn_server_t *turn_server) {
@@ -90,23 +85,21 @@ JUICE_EXPORT int juice_set_remote_gathering_done(juice_agent_t *agent) {
 }
 
 JUICE_EXPORT int juice_send(juice_agent_t *agent, const char *data, size_t size) {
-	if (!agent || (!data && size))
-		return JUICE_ERR_INVALID;
-
-	if (agent_send(agent, data, size, 0) < 0)
-		return JUICE_ERR_FAILED;
-
-	return JUICE_ERR_SUCCESS;
+	return juice_send_diffserv(agent, data, size, 0);
 }
 
 JUICE_EXPORT int juice_send_diffserv(juice_agent_t *agent, const char *data, size_t size, int ds) {
 	if (!agent || (!data && size))
 		return JUICE_ERR_INVALID;
 
-	if (agent_send(agent, data, size, ds) < 0)
-		return JUICE_ERR_FAILED;
-
-	return JUICE_ERR_SUCCESS;
+	int ret = agent_send(agent, data, size, ds);
+	if(ret >= 0)
+		return JUICE_ERR_SUCCESS;
+	if(ret == -SEAGAIN || ret == -SEWOULDBLOCK)
+		return JUICE_ERR_AGAIN;
+	if(ret == -SEMSGSIZE)
+		return JUICE_ERR_TOO_LARGE;
+	return JUICE_ERR_FAILED;
 }
 
 JUICE_EXPORT juice_state_t juice_get_state(juice_agent_t *agent) { return agent_get_state(agent); }
@@ -145,6 +138,14 @@ JUICE_EXPORT int juice_get_selected_addresses(juice_agent_t *agent, char *local,
 		return JUICE_ERR_FAILED;
 
 	return JUICE_ERR_SUCCESS;
+}
+
+int juice_set_local_ice_attributes(juice_agent_t *agent, const char *ufrag, const char *pwd)
+{
+	if (!ufrag || !pwd)
+		return JUICE_ERR_INVALID;
+
+	return agent_set_local_ice_attributes(agent, ufrag, pwd);
 }
 
 JUICE_EXPORT const char *juice_state_to_string(juice_state_t state) {
@@ -214,4 +215,12 @@ JUICE_EXPORT int juice_server_add_credentials(juice_server_t *server,
 	(void)lifetime_ms;
 	return JUICE_ERR_INVALID;
 #endif
+}
+
+int juice_set_ice_tcp_mode(juice_agent_t *agent, juice_ice_tcp_mode_t ice_tcp_mode)
+{
+	if (!agent)
+		return JUICE_ERR_INVALID;
+
+	return agent_set_ice_tcp_mode(agent, ice_tcp_mode);
 }

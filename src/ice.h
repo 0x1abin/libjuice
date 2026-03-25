@@ -11,12 +11,21 @@
 
 #include "addr.h"
 #include "juice.h"
+#include "tcp.h"
 #include "timestamp.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#define ICE_MAX_CANDIDATES_COUNT 10 // ~ 500B * 20 = 10KB
+#ifdef JUICE_ICE_MAX_CANDIDATES_COUNT
+#define ICE_MAX_CANDIDATES_COUNT JUICE_ICE_MAX_CANDIDATES_COUNT
+#elif defined(ESP_PLATFORM)
+#define ICE_MAX_CANDIDATES_COUNT 8
+#else
+#define ICE_MAX_CANDIDATES_COUNT 20
+#endif
+
+#define ICE_CANDIDATE_PENALTY_TCP 50
 
 typedef enum ice_candidate_type {
 	ICE_CANDIDATE_TYPE_UNKNOWN,
@@ -25,6 +34,13 @@ typedef enum ice_candidate_type {
 	ICE_CANDIDATE_TYPE_PEER_REFLEXIVE,
 	ICE_CANDIDATE_TYPE_RELAYED,
 } ice_candidate_type_t;
+
+typedef enum ice_candidate_transport {
+	ICE_CANDIDATE_TRANSPORT_UDP,
+	ICE_CANDIDATE_TRANSPORT_TCP_TYPE_ACTIVE,
+	ICE_CANDIDATE_TRANSPORT_TCP_TYPE_PASSIVE,
+	ICE_CANDIDATE_TRANSPORT_TCP_TYPE_SO,
+} ice_candidate_transport_t;
 
 // RFC 8445: The RECOMMENDED values for type preferences are 126 for host candidates, 110 for
 // peer-reflexive candidates, 100 for server-reflexive candidates, and 0 for relayed candidates.
@@ -38,15 +54,25 @@ typedef struct ice_candidate {
 	uint32_t priority;
 	int component;
 	char foundation[32 + 1]; // 1 to 32 characters
-	char transport[32 + 1];
+	ice_candidate_transport_t transport;
+#ifdef ESP_PLATFORM
+	char hostname[64 + 1];  // reduced: IP addresses are max ~45 chars
+	char service[8 + 1];    // reduced: port numbers are max 5 chars
+#else
 	char hostname[256 + 1];
 	char service[32 + 1];
+#endif
 	addr_record_t resolved;
 } ice_candidate_t;
 
 typedef struct ice_description {
+#ifdef ESP_PLATFORM
+	char ice_ufrag[32 + 1]; // reduced: typical ufrag is 4 chars
+	char ice_pwd[32 + 1];   // reduced: typical pwd is 22 chars
+#else
 	char ice_ufrag[256 + 1]; // 4 to 256 characters
 	char ice_pwd[256 + 1];   // 22 to 256 characters
+#endif
 	bool ice_lite;
 	ice_candidate_t candidates[ICE_MAX_CANDIDATES_COUNT];
 	int candidates_count;
@@ -67,6 +93,7 @@ typedef struct ice_candidate_pair {
 	ice_candidate_pair_state_t state;
 	bool nominated;
 	bool nomination_requested;
+	tcp_state_t tcp_state;
 	timestamp_t consent_expiry;
 } ice_candidate_pair_t;
 
@@ -84,7 +111,8 @@ int ice_parse_sdp(const char *sdp, ice_description_t *description);
 int ice_parse_candidate_sdp(const char *line, ice_candidate_t *candidate);
 int ice_create_local_description(ice_description_t *description);
 int ice_create_local_candidate(ice_candidate_type_t type, int component, int index,
-                               const addr_record_t *record, ice_candidate_t *candidate);
+                               const addr_record_t *record, ice_candidate_t *candidate,
+                               ice_candidate_transport_t transport);
 int ice_resolve_candidate(ice_candidate_t *candidate, ice_resolve_mode_t mode);
 int ice_add_candidate(ice_candidate_t *candidate, ice_description_t *description);
 void ice_sort_candidates(ice_description_t *description);
@@ -99,6 +127,9 @@ int ice_update_candidate_pair(ice_candidate_pair_t *pair, bool is_controlling);
 
 int ice_candidates_count(const ice_description_t *description, ice_candidate_type_t type);
 
-uint32_t ice_compute_priority(ice_candidate_type_t type, int family, int component, int index);
+uint32_t ice_compute_priority(ice_candidate_type_t type, int family, int component, int index,
+                              ice_candidate_transport_t transport);
+
+bool ice_is_valid_string(const char *str);
 
 #endif

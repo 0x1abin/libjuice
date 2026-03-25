@@ -1,0 +1,69 @@
+menu "libjuice"
+
+    config JUICE_ICE_MAX_CANDIDATES
+        int "Maximum ICE candidates per description"
+        default 8
+        range 4 20
+        help
+            Maximum number of ICE candidates per local/remote description.
+            Each candidate consumes ~220 bytes. Reducing this value saves
+            significant memory in the agent structure.
+            Typical embedded usage needs 4-8 candidates.
+
+    config JUICE_TASK_STACK_SIZE
+        int "Internal task stack size (bytes)"
+        default 6144
+        range 4096 16384
+        help
+            Stack size for libjuice internal FreeRTOS tasks (poll/mux threads).
+            Minimum 4096 for basic operation. 6144 recommended.
+            Increase if stack overflow occurs during STUN/TURN processing.
+
+    config JUICE_MAX_STUN_SERVERS
+        int "Maximum STUN server entries"
+        default 1
+        range 1 4
+        help
+            Maximum number of STUN server entries.
+
+    config JUICE_MAX_RELAY_SERVERS
+        int "Maximum TURN relay entries"
+        default 1
+        range 1 4
+        help
+            Maximum number of TURN relay server entries.
+
+    config JUICE_STUN_MAX_CREDENTIAL_LEN
+        int "Maximum STUN credential field length"
+        default 128
+        range 64 764
+        help
+            Maximum length for STUN username, realm, nonce, and password fields.
+            RFC allows up to 764 bytes. 128 is sufficient for typical ICE usage.
+            Reducing this value significantly reduces stack usage during
+            STUN message processing (~2KB saved per STUN transaction).
+
+    config JUICE_BUFFER_SIZE
+        int "Network buffer size (bytes)"
+        default 1500
+        range 1024 4096
+        help
+            Size of network receive/send buffers. STUN messages are typically
+            under 1000 bytes. 1500 (MTU size) is recommended for embedded.
+
+    config JUICE_LOG_BUFFER_SIZE
+        int "Log message buffer size (bytes)"
+        default 256
+        range 128 4096
+        help
+            Size of the log formatting buffer. Allocated on stack per log call.
+            Reduce to minimize stack usage in logging-heavy code paths.
+
+    config JUICE_ENABLE_SERVER
+        bool "Enable JUICE server support"
+        default n
+        help
+            Enable ICE/TURN server functionality. Disable to save code size
+            on client-only devices.
+
+endmenu

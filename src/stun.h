@@ -256,27 +256,45 @@ typedef enum stun_password_algorithm {
 
 #pragma pack(pop)
 
+#ifdef JUICE_STUN_MAX_CREDENTIAL_LEN
+// Configurable via Kconfig
+#define STUN_MAX_USERNAME_LEN JUICE_STUN_MAX_CREDENTIAL_LEN
+#define STUN_MAX_REALM_LEN JUICE_STUN_MAX_CREDENTIAL_LEN
+#define STUN_MAX_NONCE_LEN JUICE_STUN_MAX_CREDENTIAL_LEN
+#define STUN_MAX_SOFTWARE_LEN JUICE_STUN_MAX_CREDENTIAL_LEN
+#define STUN_MAX_ERROR_REASON_LEN JUICE_STUN_MAX_CREDENTIAL_LEN
+#define STUN_MAX_PASSWORD_LEN JUICE_STUN_MAX_CREDENTIAL_LEN
+#elif defined(ESP_PLATFORM)
+// Reduced defaults for embedded platforms
+#define STUN_MAX_USERNAME_LEN (127 + 1)
+#define STUN_MAX_REALM_LEN (127 + 1)
+#define STUN_MAX_NONCE_LEN (127 + 1)
+#define STUN_MAX_SOFTWARE_LEN (127 + 1)
+#define STUN_MAX_ERROR_REASON_LEN (127 + 1)
+#define STUN_MAX_PASSWORD_LEN STUN_MAX_USERNAME_LEN
+#else
 // The value of USERNAME is a variable-length value. It MUST contain a UTF-8 [RFC3629] encoded
 // sequence of less than 513 bytes [...]
-#define STUN_MAX_USERNAME_LEN 513 + 1
+#define STUN_MAX_USERNAME_LEN (513 + 1)
 
 // The REALM attribute [...] MUST be a UTF-8 [RFC3629] encoded sequence of less than 128 characters
 // (which can be as long as 763 bytes)
-#define STUN_MAX_REALM_LEN 763 + 1
+#define STUN_MAX_REALM_LEN (763 + 1)
 
 // The NONCE attribute may be present in requests and responses. It [...] MUST be less than 128
 // characters (which can be as long as 763 bytes)
-#define STUN_MAX_NONCE_LEN 763 + 1
+#define STUN_MAX_NONCE_LEN (763 + 1)
 
 // The value of SOFTWARE is variable length. It MUST be a UTF-8 [RFC3629] encoded sequence of less
 // than 128 characters (which can be as long as 763 bytes)
-#define STUN_MAX_SOFTWARE_LEN 763 + 1
+#define STUN_MAX_SOFTWARE_LEN (763 + 1)
 
 // The reason phrase MUST be a UTF-8-encoded [RFC3629] sequence of fewer than 128 characters (which
 // can be as long as 509 bytes when encoding them or 763 bytes when decoding them).
-#define STUN_MAX_ERROR_REASON_LEN 763 + 1
+#define STUN_MAX_ERROR_REASON_LEN (763 + 1)
 
 #define STUN_MAX_PASSWORD_LEN STUN_MAX_USERNAME_LEN
+#endif
 
 // Nonce cookie prefix as specified in https://www.rfc-editor.org/rfc/rfc8489.html#section-9.2
 #define STUN_NONCE_COOKIE "obMatJos2"
@@ -295,7 +313,18 @@ typedef enum stun_password_algorithm {
 #define STUN_SECURITY_PASSWORD_ALGORITHMS_BIT 0x01
 #define STUN_SECURITY_USERNAME_ANONYMITY_BIT 0x02
 
+#ifdef ESP_PLATFORM
+#define STUN_MAX_PASSWORD_ALGORITHMS_VALUE_SIZE 64
+#else
 #define STUN_MAX_PASSWORD_ALGORITHMS_VALUE_SIZE 256
+#endif
+
+// RFC 5766: When forming a CreatePermission request, the client MUST include at least one XOR-PEER-ADDRESS attribute, and MAY include more than one such attribute.
+#ifdef ESP_PLATFORM
+#define STUN_MAX_PEER_ADDRESSES 2
+#else
+#define STUN_MAX_PEER_ADDRESSES 8
+#endif
 
 typedef struct stun_credentials {
 	char username[STUN_MAX_USERNAME_LEN];
@@ -326,7 +355,8 @@ typedef struct stun_message {
 	bool has_fingerprint;
 
 	// TURN
-	addr_record_t peer;
+	addr_record_t peers[STUN_MAX_PEER_ADDRESSES];
+	size_t peers_size;
 	addr_record_t relayed;
 	addr_record_t alternate_server;
 	const char *data;
@@ -370,6 +400,7 @@ const char *stun_get_error_reason(unsigned int code);
 // Export for tests
 JUICE_EXPORT bool _juice_is_stun_datagram(const void *data, size_t size);
 JUICE_EXPORT int _juice_stun_read(void *data, size_t size, stun_message_t *msg);
+JUICE_EXPORT int _juice_stun_write(void *buf, size_t size, const stun_message_t *msg, const char *password);
 JUICE_EXPORT bool _juice_stun_check_integrity(void *buf, size_t size, const stun_message_t *msg,
                                               const char *password);
 

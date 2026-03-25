@@ -58,57 +58,6 @@ typedef ULONG nfds_t;
 #define SEMSGSIZE WSAEMSGSIZE
 #define SENETUNREACH WSAENETUNREACH
 
-#elif defined(ESP_PLATFORM)
-
-#include "esp_netif.h"
-#include <arpa/inet.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <limits.h>
-#include <net/if.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-// #include <poll.h>
-#include <sys/poll.h>
-#include <sys/ioctl.h>
-#include <sys/select.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <unistd.h>
-
-#define NO_PMTUDISC
-
-typedef int socket_t;
-typedef int ctl_t;
-typedef int sockopt_t;
-#define sockerrno errno
-#define INVALID_SOCKET -1
-#define ioctlsocket ioctl
-#define closesocket close
-
-#define SEADDRINUSE EADDRINUSE
-#define SEINTR EINTR
-#define SEAGAIN EAGAIN
-#define SEACCES EACCES
-#define SEWOULDBLOCK EWOULDBLOCK
-#define SEINPROGRESS EINPROGRESS
-#define SECONNREFUSED ECONNREFUSED
-#define SECONNRESET ECONNRESET
-#define SENETRESET ENETRESET
-#define SEMSGSIZE EMSGSIZE
-#define SENETUNREACH ENETUNREACH
-
-#define NI_NUMERICHOST	1	/* Don't try to look up hostname.  */
-
-
-// int
-// getnameinfo(const struct sockaddr *sa, socklen_t salen,
-// 		    char *host, size_t hostlen,
-// 			char *serv, size_t servlen, int flags);
-
 #else // assume POSIX
 
 #include <arpa/inet.h>
@@ -119,7 +68,11 @@ typedef int sockopt_t;
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#ifdef ESP_PLATFORM
+#include <sys/poll.h>
+#else
 #include <poll.h>
+#endif
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <sys/socket.h>
@@ -132,7 +85,7 @@ typedef int sockopt_t;
 #define NO_PMTUDISC
 #endif
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ESP_PLATFORM)
 #define NO_IFADDRS
 #else
 #include <ifaddrs.h>
@@ -159,6 +112,18 @@ typedef int sockopt_t;
 #define SENETUNREACH ENETUNREACH
 
 #endif // _WIN32
+
+// lwIP may not define NI_NUMERICHOST/NI_NUMERICSERV or getnameinfo
+#ifndef NI_NUMERICHOST
+#define NI_NUMERICHOST 0x01
+#endif
+#ifndef NI_NUMERICSERV
+#define NI_NUMERICSERV 0x02
+#endif
+#ifndef NI_MAXHOST
+#define NI_MAXHOST 1025
+#endif
+
 
 #ifndef IN6_IS_ADDR_LOOPBACK
 #define IN6_IS_ADDR_LOOPBACK(a)                                                                    \

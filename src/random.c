@@ -14,15 +14,6 @@
 #include <stdbool.h>
 #include <time.h>
 
-#ifdef ESP_PLATFORM
-#include "esp_random.h"
-
-void juice_random(void *buf, size_t size) {
-	esp_fill_random(buf, size);
-}
-
-#else
-
 // getrandom() is not available in Android NDK API < 28 and needs glibc >= 2.25
 #if defined(__linux__) && !defined(__ANDROID__) && (!defined(__GLIBC__) || __GLIBC__ > 2 || __GLIBC_MINOR__ >= 25)
 
@@ -56,6 +47,15 @@ static int random_bytes(void *buf, size_t size) {
 	// Requires Windows 7 or later
 	NTSTATUS status = BCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)size, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
 	return !status ? 0 : -1;
+}
+
+#elif defined(ESP_PLATFORM)
+
+#include <esp_random.h>
+
+static int random_bytes(void *buf, size_t size) {
+	esp_fill_random(buf, size);
+	return 0;
 }
 
 #else
@@ -109,7 +109,6 @@ void juice_random(void *buf, size_t size) {
 
 	mutex_unlock(&rand_mutex);
 }
-#endif
 
 void juice_random_str64(char *buf, size_t size) {
 	static const char chars64[] =

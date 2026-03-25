@@ -10,52 +10,37 @@
 
 #if USE_NETTLE
 #include <nettle/hmac.h>
-#elif defined(ESP_PLATFORM)
-#include "mbedtls/md.h"
+#elif USE_MBEDTLS
+#define MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
+#include <mbedtls/md.h>
 #else
 #include "picohash.h"
 #endif
 
-void juice_hmac_sha1(const void *message, size_t size, const void *key, size_t key_size, void *digest) {
+void hmac_sha1(const void *message, size_t size, const void *key, size_t key_size, void *digest) {
 #if USE_NETTLE
 	struct hmac_sha1_ctx ctx;
 	hmac_sha1_set_key(&ctx, key_size, key);
 	hmac_sha1_update(&ctx, size, message);
 	hmac_sha1_digest(&ctx, HMAC_SHA1_SIZE, digest);
-#elif defined(ESP_PLATFORM)
-	mbedtls_md_context_t ctx;
-	mbedtls_md_type_t md_type = MBEDTLS_MD_SHA1;
-	mbedtls_md_init(&ctx);
-	mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 1);
-	mbedtls_md_hmac_starts(&ctx, key, key_size);
-	mbedtls_md_hmac_update(&ctx, message, size);
-	mbedtls_md_hmac_finish(&ctx, digest);
-	mbedtls_md_free(&ctx);
+#elif USE_MBEDTLS
+	mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA1), key, key_size, message, size, digest);
 #else
 	picohash_ctx_t ctx;
 	picohash_init_hmac(&ctx, picohash_init_sha1, key, key_size);
 	picohash_update(&ctx, message, size);
 	picohash_final(&ctx, digest);
 #endif
-
-
 }
 
-void juice_hmac_sha256(const void *message, size_t size, const void *key, size_t key_size, void *digest) {
+void hmac_sha256(const void *message, size_t size, const void *key, size_t key_size, void *digest) {
 #if USE_NETTLE
 	struct hmac_sha256_ctx ctx;
 	hmac_sha256_set_key(&ctx, key_size, key);
 	hmac_sha256_update(&ctx, size, message);
 	hmac_sha256_digest(&ctx, HMAC_SHA256_SIZE, digest);
-#elif defined(ESP_PLATFORM)
-	mbedtls_md_context_t ctx;
-	mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
-	mbedtls_md_init(&ctx);
-	mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 1);
-	mbedtls_md_hmac_starts(&ctx, key, key_size);
-	mbedtls_md_hmac_update(&ctx, message, size);
-	mbedtls_md_hmac_finish(&ctx, digest);
-	mbedtls_md_free(&ctx);
+#elif USE_MBEDTLS
+	mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), key, key_size, message, size, digest);
 #else
 	picohash_ctx_t ctx;
 	picohash_init_hmac(&ctx, picohash_init_sha256, key, key_size);

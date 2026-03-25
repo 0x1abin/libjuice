@@ -17,6 +17,10 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef ESP_PLATFORM
+#include "esp_netif.h"
+#endif
+
 static struct addrinfo *find_family(struct addrinfo *ai_list, int family) {
 	struct addrinfo *ai = ai_list;
 	while (ai && ai->ai_family != family)
@@ -68,20 +72,20 @@ static socket_t create_socket_for_addrinfo(const udp_socket_config_t *config,
 #endif
 #else
 	// It seems Mac OS lacks a way to set the DF flag...
-// 	const sockopt_t enabled = 1;
-// #ifdef IP_DONTFRAG
-// 	setsockopt(sock, IPPROTO_IP, IP_DONTFRAG, (const char *)&enabled, sizeof(enabled));
-// #endif
+	const sockopt_t enabled = 1;
+#ifdef IP_DONTFRAG
+	setsockopt(sock, IPPROTO_IP, IP_DONTFRAG, (const char *)&enabled, sizeof(enabled));
+#endif
 #ifdef IPV6_DONTFRAG
 	if (ai->ai_family == AF_INET6)
 		setsockopt(sock, IPPROTO_IPV6, IPV6_DONTFRAG, (const char *)&enabled, sizeof(enabled));
 #endif
 #endif
 
-	// // Set buffer size up to 1 MiB for performance
-	// const sockopt_t buffer_size = 1 * 1024 * 1024;
-	// setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (const char *)&buffer_size, sizeof(buffer_size));
-	// setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (const char *)&buffer_size, sizeof(buffer_size));
+	// Set buffer size up to 1 MiB for performance
+	const sockopt_t buffer_size = 1 * 1024 * 1024;
+	setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (const char *)&buffer_size, sizeof(buffer_size));
+	setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (const char *)&buffer_size, sizeof(buffer_size));
 
 	ctl_t nbio = 1;
 	if (ioctlsocket(sock, FIONBIO, &nbio)) {
@@ -179,6 +183,7 @@ socket_t udp_create_socket(const udp_socket_config_t *config) {
 int udp_recvfrom(socket_t sock, char *buffer, size_t size, addr_record_t *src) {
 	while (true) {
 		src->len = sizeof(src->addr);
+		src->socktype = SOCK_DGRAM;
 		int len =
 		    recvfrom(sock, buffer, (socklen_t)size, 0, (struct sockaddr *)&src->addr, &src->len);
 		if (len >= 0) {
@@ -200,11 +205,12 @@ int udp_recvfrom(socket_t sock, char *buffer, size_t size, addr_record_t *src) {
 	}
 }
 
-int udp_send2(socket_t sock, const char *data, size_t size, const addr_record_t *dst) {
-#if !defined(__linux__) && !defined(ESP_PLATFORM)
+int udp_sendto(socket_t sock, const char *data, size_t size, const addr_record_t *dst) {
+#ifndef __linux__
 	addr_record_t tmp = *dst;
 	addr_record_t name;
 	name.len = sizeof(name.addr);
+	name.socktype = SOCK_DGRAM;
 	if (getsockname(sock, (struct sockaddr *)&name.addr, &name.len) == 0) {
 		if (name.addr.ss_family == AF_INET6)
 			addr_map_inet6_v4mapped(&tmp.addr, &tmp.len);
@@ -223,7 +229,7 @@ int udp_sendto_self(socket_t sock, const char *data, size_t size) {
 		return -1;
 
 	int ret;
-#if !defined(__linux__) && !defined(ESP_PLATFORM)
+#ifndef __linux__
 	// We know local has the same address family as sock here
 	ret = sendto(sock, data, (socklen_t)size, 0, (const struct sockaddr *)&local.addr, local.len);
 #else
@@ -236,7 +242,7 @@ int udp_sendto_self(socket_t sock, const char *data, size_t size) {
 	if (udp_get_local_addr(sock, AF_INET, &local) < 0)
 		return -1;
 
-#if !defined(__linux__) && !defined(ESP_PLATFORM)
+#ifndef __linux__
 	addr_map_inet6_v4mapped(&local.addr, &local.len);
 	return sendto(sock, data, (socklen_t)size, 0, (const struct sockaddr *)&local.addr, local.len);
 #else
@@ -256,6 +262,7 @@ int udp_set_diffserv(socket_t sock, int ds) {
 #else
 	addr_record_t name;
 	name.len = sizeof(name.addr);
+	name.socktype = SOCK_DGRAM;
 	if (getsockname(sock, (struct sockaddr *)&name.addr, &name.len) < 0) {
 		JLOG_WARN("getsockname failed, errno=%d", sockerrno);
 		return -1;
@@ -304,6 +311,7 @@ uint16_t udp_get_port(socket_t sock) {
 
 int udp_get_bound_addr(socket_t sock, addr_record_t *record) {
 	record->len = sizeof(record->addr);
+	record->socktype = SOCK_DGRAM;
 	if (getsockname(sock, (struct sockaddr *)&record->addr, &record->len)) {
 		JLOG_WARN("getsockname failed, errno=%d", sockerrno);
 		return -1;
@@ -335,6 +343,7 @@ int udp_get_local_addr(socket_t sock, int family_hint, addr_record_t *record) {
 		sin->sin_family = AF_INET;
 		sin->sin_port = htons(port);
 		record->len = sizeof(*sin);
+		record->socktype = SOCK_DGRAM;
 	}
 
 	switch (record->addr.ss_family) {
@@ -362,7 +371,6 @@ int udp_get_local_addr(socket_t sock, int family_hint, addr_record_t *record) {
 	return 0;
 }
 
-#ifndef ESP_PLATFORM
 // Helper function to check if a similar address already exists in records
 // This function ignores the port
 static int has_duplicate_addr(struct sockaddr *addr, const addr_record_t *records, size_t count) {
@@ -391,7 +399,6 @@ static int has_duplicate_addr(struct sockaddr *addr, const addr_record_t *record
 	}
 	return false;
 }
-#endif
 
 #if !defined(_WIN32) && defined(NO_IFADDRS)
 // Helper function to get the IPv6 address of the default interface
@@ -506,6 +513,7 @@ int udp_get_addrs(socket_t sock, addr_record_t *records, size_t count) {
 				if (current != end) {
 					memcpy(&current->addr, sa, len);
 					current->len = len;
+					current->socktype = SOCK_DGRAM;
 					addr_unmap_inet6_v4mapped((struct sockaddr *)&current->addr, &current->len);
 					addr_set_port((struct sockaddr *)&current->addr, port);
 					++current;
@@ -513,39 +521,6 @@ int udp_get_addrs(socket_t sock, addr_record_t *records, size_t count) {
 			}
 		}
 	}
-
-#elif defined(ESP_PLATFORM)
-	esp_netif_t* netif = esp_netif_get_default_netif();
-	esp_netif_ip_info_t ip4;
-	if (esp_netif_get_ip_info(netif, &ip4) == ESP_OK) {
-		JLOG_DEBUG("candidate - IPv4 address: " IPSTR ", port: %d", IP2STR(&ip4.ip), port);
-		++ret;
-		if (current != end) {
-			memset(&current->addr, 0, sizeof(struct sockaddr_storage));
-			struct sockaddr_in *addr_in = (struct sockaddr_in *)&current->addr;
-			addr_in->sin_family = AF_INET;
-			addr_in->sin_addr.s_addr = ip4.ip.addr;
-			addr_set_port((struct sockaddr *)&current->addr, port);
-			current->len = sizeof(struct sockaddr_storage);
-			++current;
-		}
-	}
-
-	esp_ip6_addr_t ip6;
-	if (esp_netif_get_ip6_global(netif, &ip6) == ESP_OK) {
-		JLOG_DEBUG("candidate - IPv6 address: " IPV6STR ", port: %d", IPV62STR(ip6), port);
-		++ret;
-		if (current != end) {
-			memset(&current->addr, 0, sizeof(struct sockaddr_storage));
-			struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *)&current->addr;
-			addr_in6->sin6_family = AF_INET6;
-			memcpy(&addr_in6->sin6_addr, &ip6, sizeof(struct in6_addr));
-			addr_set_port((struct sockaddr *)&current->addr, port);
-			current->len = sizeof(struct sockaddr_storage);
-			++current;
-		}
-	}
-
 #else // POSIX
 #ifndef NO_IFADDRS
 	struct ifaddrs *ifas;
@@ -572,6 +547,7 @@ int udp_get_addrs(socket_t sock, addr_record_t *records, size_t count) {
 				if (current != end) {
 					memcpy(&current->addr, sa, len);
 					current->len = len;
+					current->socktype = SOCK_DGRAM;
 					addr_set_port((struct sockaddr *)&current->addr, port);
 					++current;
 				}
@@ -581,7 +557,43 @@ int udp_get_addrs(socket_t sock, addr_record_t *records, size_t count) {
 
 	freeifaddrs(ifas);
 
-#else // NO_IFADDRS defined
+#elif defined(ESP_PLATFORM) // ESP-IDF: use esp_netif API
+
+	esp_netif_t *netif = NULL;
+	while ((netif = esp_netif_next_unsafe(netif)) != NULL) {
+		if (!esp_netif_is_netif_up(netif))
+			continue;
+
+		esp_netif_ip_info_t ip_info;
+		if (esp_netif_get_ip_info(netif, &ip_info) != ESP_OK)
+			continue;
+
+		if (ip_info.ip.addr == 0)
+			continue;
+
+		// Skip loopback (127.x.x.x)
+		uint8_t first_byte = ip_info.ip.addr & 0xFF;
+		if (first_byte == 127)
+			continue;
+
+		struct sockaddr_in sin;
+		memset(&sin, 0, sizeof(sin));
+		sin.sin_family = AF_INET;
+		sin.sin_addr.s_addr = ip_info.ip.addr;
+		sin.sin_port = htons(port);
+
+		if (!has_duplicate_addr((struct sockaddr *)&sin, records, current - records)) {
+			++ret;
+			if (current != end) {
+				memcpy(&current->addr, &sin, sizeof(sin));
+				current->len = sizeof(sin);
+				current->socktype = SOCK_DGRAM;
+				++current;
+			}
+		}
+	}
+
+#else // NO_IFADDRS defined (non-ESP platforms)
 	char buf[4096];
 	struct ifconf ifc;
 	memset(&ifc, 0, sizeof(ifc));
@@ -610,6 +622,7 @@ int udp_get_addrs(socket_t sock, addr_record_t *records, size_t count) {
 				if (current != end) {
 					memcpy(&current->addr, sa, len);
 					current->len = len;
+					current->socktype = SOCK_DGRAM;
 					addr_set_port((struct sockaddr *)&current->addr, port);
 					++current;
 				}
@@ -625,6 +638,7 @@ int udp_get_addrs(socket_t sock, addr_record_t *records, size_t count) {
 				if (current != end) {
 					memcpy(&current->addr, &sin6, sizeof(sin6));
 					current->len = sizeof(sin6);
+					current->socktype = SOCK_DGRAM;
 					++current;
 				}
 			}
@@ -632,6 +646,6 @@ int udp_get_addrs(socket_t sock, addr_record_t *records, size_t count) {
 	}
 #endif
 #endif
-	JLOG_DEBUG("Found %d candidate addresses", ret);
+
 	return ret;
 }

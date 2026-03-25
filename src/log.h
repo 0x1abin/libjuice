@@ -13,8 +13,6 @@
 
 #include <stdarg.h>
 
-#ifndef ESP_PLATFORM__
-
 bool juice_log_is_enabled(juice_log_level_t level);
 void juice_log_write(juice_log_level_t level, const char *file, int line, const char *fmt, ...);
 
@@ -31,28 +29,5 @@ void juice_log_write(juice_log_level_t level, const char *file, int line, const 
 #define JLOG_WARN_ENABLED juice_log_is_enabled(JUICE_LOG_LEVEL_WARN)
 #define JLOG_ERROR_ENABLED juice_log_is_enabled(JUICE_LOG_LEVEL_ERROR)
 #define JLOG_FATAL_ENABLED juice_log_is_enabled(JUICE_LOG_LEVEL_FATAL)
-
-#else
-
-#include <stdarg.h>
-#include "esp_log.h"
-
-#define JUICE_LOG_TAG "JUICE"
-
-#define JLOG_VERBOSE(...) ESP_LOGV(JUICE_LOG_TAG, __VA_ARGS__)
-#define JLOG_DEBUG(...) ESP_LOGD(JUICE_LOG_TAG, __VA_ARGS__)
-#define JLOG_INFO(...) ESP_LOGI(JUICE_LOG_TAG, __VA_ARGS__)
-#define JLOG_WARN(...) ESP_LOGW(JUICE_LOG_TAG, __VA_ARGS__)
-#define JLOG_ERROR(...) ESP_LOGE(JUICE_LOG_TAG, __VA_ARGS__)
-#define JLOG_FATAL(...) ESP_LOGE(JUICE_LOG_TAG, __VA_ARGS__)
-
-#define JLOG_VERBOSE_ENABLED (esp_log_level_get(JUICE_LOG_TAG) <= ESP_LOG_VERBOSE)
-#define JLOG_DEBUG_ENABLED (esp_log_level_get(JUICE_LOG_TAG) <= ESP_LOG_DEBUG)
-#define JLOG_INFO_ENABLED (esp_log_level_get(JUICE_LOG_TAG) <= ESP_LOG_INFO)
-#define JLOG_WARN_ENABLED (esp_log_level_get(JUICE_LOG_TAG) <= ESP_LOG_WARN)
-#define JLOG_ERROR_ENABLED (esp_log_level_get(JUICE_LOG_TAG) <= ESP_LOG_ERROR)
-#define JLOG_FATAL_ENABLED (esp_log_level_get(JUICE_LOG_TAG) <= ESP_LOG_ERROR)
-
-#endif
 
 #endif // JUICE_LOG_H

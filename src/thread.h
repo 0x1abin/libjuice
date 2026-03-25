@@ -64,6 +64,98 @@ static inline void thread_join_impl(thread_t t, thread_return_t *res) {
 	((*(t) = CreateThread(NULL, 0, func, arg, 0, NULL)) != NULL ? 0 : (int)GetLastError())
 #define thread_join(t, res) thread_join_impl(t, res)
 
+#elif defined(ESP_PLATFORM) // ESP-IDF: FreeRTOS-based threading
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
+#include <stdlib.h>
+
+#ifndef JUICE_TASK_STACK_SIZE
+#define JUICE_TASK_STACK_SIZE 6144
+#endif
+
+typedef SemaphoreHandle_t mutex_t;
+typedef TaskHandle_t thread_t;
+typedef void thread_return_t;
+#define THREAD_CALL
+
+#define MUTEX_INITIALIZER NULL
+
+#define MUTEX_PLAIN 0x0
+#define MUTEX_RECURSIVE 0x1
+
+static portMUX_TYPE juice_mutex_spinlock = portMUX_INITIALIZER_UNLOCKED;
+
+static inline int mutex_init_impl(mutex_t *m, int flags) {
+	(void)flags;
+	*m = xSemaphoreCreateRecursiveMutex(); // always recursive for simplicity
+	return *m ? 0 : -1;
+}
+
+static inline int mutex_lock_impl(volatile mutex_t *m) {
+	if (*m == NULL) {
+		// Lazy initialization for MUTEX_INITIALIZER
+		SemaphoreHandle_t s = xSemaphoreCreateRecursiveMutex();
+		if (!s) return -1;
+		taskENTER_CRITICAL(&juice_mutex_spinlock);
+		if (*m == NULL) {
+			*m = s;
+			s = NULL;
+		}
+		taskEXIT_CRITICAL(&juice_mutex_spinlock);
+		if (s) vSemaphoreDelete(s);
+	}
+	return xSemaphoreTakeRecursive(*m, portMAX_DELAY) == pdTRUE ? 0 : -1;
+}
+
+#define mutex_init(m, flags) mutex_init_impl(m, flags)
+#define mutex_lock(m) mutex_lock_impl(m)
+#define mutex_unlock(m) (void)xSemaphoreGiveRecursive(*(m))
+#define mutex_destroy(m) do { if (*(m)) vSemaphoreDelete(*(m)); } while(0)
+
+typedef struct {
+	void (*func)(void *);
+	void *arg;
+	SemaphoreHandle_t done;
+} juice_task_wrapper_arg_t;
+
+static inline void juice_task_wrapper(void *param) {
+	juice_task_wrapper_arg_t *w = (juice_task_wrapper_arg_t *)param;
+	void (*func)(void *) = w->func;
+	void *arg = w->arg;
+	SemaphoreHandle_t done = w->done;
+	free(w);
+	func(arg);
+	xSemaphoreGive(done);
+	vTaskDelete(NULL);
+}
+
+typedef struct {
+	TaskHandle_t handle;
+	SemaphoreHandle_t done;
+} juice_thread_t;
+
+// Override thread_t for the composite type
+#undef thread_t
+#define thread_t juice_thread_t
+
+static inline int thread_init_impl(juice_thread_t *t, void (*func)(void *), void *arg) {
+	juice_task_wrapper_arg_t *w = (juice_task_wrapper_arg_t *)malloc(sizeof(juice_task_wrapper_arg_t));
+	if (!w) return -1;
+	w->func = func;
+	w->arg = arg;
+	w->done = xSemaphoreCreateBinary();
+	if (!w->done) { free(w); return -1; }
+	t->done = w->done;
+	BaseType_t ret = xTaskCreate(juice_task_wrapper, "juice", JUICE_TASK_STACK_SIZE, w, 5, &t->handle);
+	if (ret != pdPASS) { vSemaphoreDelete(w->done); free(w); return -1; }
+	return 0;
+}
+
+#define thread_init(t, func, arg) thread_init_impl(t, (void(*)(void*))(func), arg)
+#define thread_join(t, res) do { (void)(res); xSemaphoreTake((t).done, portMAX_DELAY); vSemaphoreDelete((t).done); } while(0)
+
 #else // POSIX
 
 #include <pthread.h>
@@ -73,9 +165,6 @@ static inline void thread_join_impl(thread_t t, thread_return_t *res) {
 #endif
 #if defined(__FreeBSD__)
 #include <pthread_np.h> // for pthread_set_name_np
-#endif
-#if defined(ESP_PLATFORM)
-#include "esp_pthread.h"
 #endif
 
 typedef pthread_mutex_t mutex_t;
