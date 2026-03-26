@@ -500,7 +500,7 @@ bool ice_is_valid_string(const char *str) {
 		return false;
 
 	for (size_t i = 0; i < strlen(str); ++i)
-		if (!isalpha(str[i]) && !isdigit(str[i]) && str[i] != '+' && str[i] != '/')
+		if (!isalpha((unsigned char)str[i]) && !isdigit((unsigned char)str[i]) && str[i] != '+' && str[i] != '/')
 			return false;
 
 	return true;

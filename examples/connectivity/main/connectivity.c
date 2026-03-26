@@ -21,7 +21,11 @@ static void sleep(unsigned int secs) { Sleep(secs * 1000); }
 #include <unistd.h> // for sleep
 #endif
 
+#ifdef ESP_PLATFORM
+#define BUFFER_SIZE 256
+#else
 #define BUFFER_SIZE 4096
+#endif
 
 static juice_agent_t *agent1;
 static juice_agent_t *agent2;
