@@ -44,9 +44,11 @@ Optionally, [Nettle](https://www.lysator.liu.se/~nisse/nettle/) can provide SHA1
 
 ## Building
 
+The `CMakeLists.txt` uses `if(ESP_PLATFORM)` to auto-detect the build environment. When built by ESP-IDF, it registers as an IDF component; otherwise, it behaves as a standard CMake project for desktop platforms. No manual switching is needed.
+
 ### ESP-IDF (ESP32 series)
 
-This library is ported as an ESP-IDF component supporting ESP32, ESP32-S2, ESP32-S3, ESP32-C2, ESP32-C3, ESP32-C5, ESP32-C6, ESP32-H2, etc. Requires ESP-IDF v5.0+.
+This library is ported as an ESP-IDF component supporting ESP32, ESP32-S2, ESP32-S3, ESP32-C2, ESP32-C3, ESP32-C5, ESP32-C6, ESP32-H2, etc. Tested on ESP-IDF v5.5 and v6.0.
 
 #### Quick start
 
